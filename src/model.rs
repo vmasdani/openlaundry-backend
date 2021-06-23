@@ -1,58 +1,58 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-struct CustomerJson {
-    uid: Option<String>,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CustomerJson {
+    pub uid: Option<String>,
 
     #[serde(rename = "createdAt")]
-    created_at: Option<u64>,
+    pub created_at: Option<u64>,
 
     #[serde(rename = "updatedAt")]
-    updated_at: Option<u64>,
-    name: Option<String>,
-    phone: Option<String>,
-    address: Option<String>,
+    pub updated_at: Option<u64>,
+    pub name: Option<String>,
+    pub phone: Option<String>,
+    pub address: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct LaundryRecordJson {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LaundryRecordJson {
     uid: Option<String>,
 
     #[serde(rename = "createdAt")]
-    created_at: Option<u64>,
+    pub created_at: Option<u64>,
 
     #[serde(rename = "updatedAt")]
-    updated_at: Option<u64>,
+    pub updated_at: Option<u64>,
 
     #[serde(rename = "customerUuid")]
-    customer_uuid: Option<u64>,
+    pub customer_uuid: Option<u64>,
 
     #[serde(rename = "laundryDocumentUuid")]
-    laundry_document_uuid: Option<u64>,
+    pub laundry_document_uuid: Option<u64>,
 
-    weight: Option<f64>,
-    price: Option<u64>,
+    pub weight: Option<f64>,
+    pub price: Option<u64>,
 
     #[serde(rename = "type")]
-    record_type: Option<u32>,
-    start: Option<u64>,
-    done: Option<u64>,
-    received: Option<u64>,
+    pub record_type: Option<u32>,
+    pub start: Option<u64>,
+    pub done: Option<u64>,
+    pub received: Option<u64>,
 
     #[serde(rename = "ePayId")]
-    e_pay_id: Option<u64>,
+    pub e_pay_id: Option<u64>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct LaundryDocumentJson {
-    uid: Option<String>,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LaundryDocumentJson {
+    pub uid: Option<String>,
 
     #[serde(rename = "createdAt")]
-    created_at: Option<u64>,
+    pub created_at: Option<u64>,
 
     #[serde(rename = "updatedAt")]
-    updated_at: Option<u64>,
+    pub updated_at: Option<u64>,
 
-    name: Option<String>,
-    date: Option<u64>,
+    pub name: Option<String>,
+    pub date: Option<u64>,
 }

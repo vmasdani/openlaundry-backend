@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 pub mod model;
+
+use model::*;
+
 #[macro_use]
 extern crate diesel;
 extern crate dotenv;
@@ -13,6 +16,7 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 use std::env;
+use std::io::Read;
 
 async fn hello_world() -> impl Responder {
     "Hello World!"
@@ -34,7 +38,41 @@ async fn backup_data(data: web::Json<TableJsonPostBody>) -> impl Responder {
     println!("Backup data:");
     println!("{:?}", data);
 
-    match serde_json::to_string(&data.into_inner()) {
+    let data = data.into_inner();
+
+    // For testing
+    // curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/22Kuw6DMAxFf6XyjCUSG5Ky9TuqDhG21Q48RGCq+u+NQHTqds859/6G7SXQAXlxEqxGYlZkI8MkRBhrF6xvhM08VBcY06DlnqdBcd/Fzc9p/MkDik0ii+Z8+hNL6RdNq8pthc61nrkNTbxG7yrYZvlbPo8vN575takAAAA="}'
+
+    match &data.customers {
+        Some(customers_str) => {
+            let customers = match base64::decode(customers_str) {
+                Ok(customers_bin) => match libflate::gzip::Decoder::new(&customers_bin[..]) {
+                    Ok(mut res) => {
+                        let mut res_str = Vec::new();
+                        res.read_to_end(&mut res_str);
+
+                        let json_str = String::from_utf8_lossy(&res_str);
+
+                        let customers_data = serde_json::from_str::<Vec<CustomerJson>>(&json_str);
+
+                        println!("Decoded JSON: {:?}", json_str);
+                        println!("Rust struct: {:?}", customers_data);
+                    }
+                    Err(e) => {
+                        println!("Customer gzip inflat error {:?}", e);
+                    }
+                },
+                Err(e) => {
+                    println!("Customer base64 error {:?}", e);
+                }
+            };
+        }
+        None => {
+            println!("Customer empty");
+        }
+    }
+
+    match serde_json::to_string(&data) {
         Ok(data_json) => Ok(HttpResponse::Ok().json(data_json)),
         Err(e) => Err(e),
     }
