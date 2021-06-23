@@ -41,7 +41,7 @@ async fn backup_data(data: web::Json<TableJsonPostBody>) -> impl Responder {
     let data = data.into_inner();
 
     // For testing
-    // curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/22Kuw6DMAxFf6XyjCUSG5Ky9TuqDhG21Q48RGCq+u+NQHTqds859/6G7SXQAXlxEqxGYlZkI8MkRBhrF6xvhM08VBcY06DlnqdBcd/Fzc9p/MkDik0ii+Z8+hNL6RdNq8pthc61nrkNTbxG7yrYZvlbPo8vN575takAAAA="}'
+    // curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/6XQvW4CMQwH8J2nqDKfpcQ28YWN56g65M622oEPcTAh3r1RKyqGsNDFsv/28JPfV9dw+dKwCYSaVDwCMRuwk0NVIhhjEp/Xyu4Yhrewrztr58thZ/DTt+z4edj/hb9DS6vqyZblnt/HtplPVs+m23PYpIzMWdZjGTEN4XLU7uY2PEJFM3nCGXSqEVitQM3GregUi/iUq/Ss2Mficy3+n+sZcYrtm4Le/qoIRUQhokeXYlQ496zUt9JzK71sXX18A+e95JAIAgAA"}'
 
     match &data.customers {
         Some(customers_str) => {
