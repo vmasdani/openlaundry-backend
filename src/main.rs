@@ -1,4 +1,5 @@
-use actix_web::HttpResponse;
+use actix_web::http::ContentEncoding;
+use actix_web::{middleware, HttpResponse};
 use actix_web::{rt::System, web, App, HttpServer, Responder};
 use diesel::r2d2::ConnectionManager;
 use serde::{Deserialize, Serialize};
@@ -91,6 +92,7 @@ async fn main() -> std::io::Result<()> {
     let sys = System::run_in_tokio("server", &local);
     let server_res = HttpServer::new(move || {
         App::new()
+            .wrap(middleware::Compress::new(ContentEncoding::Br))
             .data(pool.clone())
             .route("/", web::get().to(hello_world))
             .route("/backup", web::post().to(backup_data))
