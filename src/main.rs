@@ -41,7 +41,7 @@ async fn backup_data(data: web::Json<TableJsonPostBody>) -> impl Responder {
     let data = data.into_inner();
 
     // For testing
-    // curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/6XQvW4CMQwH8J2nqDKfpcQ28YWN56g65M622oEPcTAh3r1RKyqGsNDFsv/28JPfV9dw+dKwCYSaVDwCMRuwk0NVIhhjEp/Xyu4Yhrewrztr58thZ/DTt+z4edj/hb9DS6vqyZblnt/HtplPVs+m23PYpIzMWdZjGTEN4XLU7uY2PEJFM3nCGXSqEVitQM3GregUi/iUq/Ss2Mficy3+n+sZcYrtm4Le/qoIRUQhokeXYlQ496zUt9JzK71sXX18A+e95JAIAgAA"}'
+    // curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/6XQvW4DMQgH8P2eovJ8SDYQc86W54g6+A5QO+RDuWSq+u6xWqXq4CztguAPw0/sh49we9ewDYSaVDwCMRuwk0NVIphiEl82yu4YxpdwrAdr5+vpYPDVt+z8djr+hN9DS6vqxdb1kT/GtlkuVq+mu2vYpozMWTZTmTCN4XbW7uZz/A0VzeQJF9C5RmC1AjUbt6JzLOJzrtKzYh+Lz7X4f65nxDm2bwp6+6siFBGFiB5dilHh3LNS30rPrfRH6zC83gFx+AWdBwIAAA=="}'
 
     match &data.customers {
         Some(customers_str) => {
