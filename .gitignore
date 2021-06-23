@@ -1,1 +1,3 @@
 /target
+openlaundry-backend.sqlite3
+.env 
