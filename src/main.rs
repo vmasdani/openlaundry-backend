@@ -2,12 +2,14 @@ use actix_web::http::ContentEncoding;
 use actix_web::{middleware, HttpResponse};
 use actix_web::{rt::System, web, App, HttpServer, Responder};
 use diesel::r2d2::ConnectionManager;
+use libflate::gzip::Encoder;
 use serde::{Deserialize, Serialize};
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 pub mod model;
+pub mod schema;
 
-use model::*;
+// use model::*;
 
 #[macro_use]
 extern crate diesel;
@@ -16,8 +18,16 @@ extern crate dotenv;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
-use std::env;
 use std::io::Read;
+use std::{env, io};
+
+use crate::model::{BackupRecord, CustomerJson};
+
+no_arg_sql_function!(
+    last_insert_rowid,
+    diesel::sql_types::Integer,
+    "Represents the SQL last_insert_row() function"
+);
 
 async fn hello_world() -> impl Responder {
     "Hello World!"
@@ -35,7 +45,10 @@ struct TableJsonPostBody {
     laundy_records: Option<String>,
 }
 
-async fn backup_data(data: web::Json<TableJsonPostBody>) -> impl Responder {
+async fn backup_data(
+    data: web::Json<TableJsonPostBody>,
+    pool: web::Data<DbPool>,
+) -> impl Responder {
     println!("Backup data:");
     println!("{:?}", data);
 
@@ -43,6 +56,67 @@ async fn backup_data(data: web::Json<TableJsonPostBody>) -> impl Responder {
 
     // For testing
     // curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/6XQvW4DMQgH8P2eovJ8SDYQc86W54g6+A5QO+RDuWSq+u6xWqXq4CztguAPw0/sh49we9ewDYSaVDwCMRuwk0NVIphiEl82yu4YxpdwrAdr5+vpYPDVt+z8djr+hN9DS6vqxdb1kT/GtlkuVq+mu2vYpozMWTZTmTCN4XbW7uZz/A0VzeQJF9C5RmC1AjUbt6JzLOJzrtKzYh+Lz7X4f65nxDm2bwp6+6siFBGFiB5dilHh3LNS30rPrfRH6zC83gFx+AWdBwIAAA=="}'
+
+    // Search email
+
+    match pool.get() {
+        Ok(conn) => {
+            use crate::schema::backup_records::dsl::*;
+
+            let found_backup_record = match backup_records
+                .filter(email.eq(&data.email))
+                .first::<BackupRecord>(&conn)
+            {
+                Ok(backup_record) => Some(backup_record),
+                Err(e) => {
+                    println!("Backup record not found {:?}", e);
+
+                    let email_clone = data.email.clone();
+
+                    let mut encoder = Encoder::new(Vec::new()).unwrap();
+                    io::copy(&mut &b"[]"[..], &mut encoder).unwrap();
+                    let empty_arr = base64::encode(encoder.finish().into_result().unwrap());
+
+                    println!("Empty arr {:?}", empty_arr);
+
+                    let new_backup_record = BackupRecord {
+                        id: None,
+                        created_at: None,
+                        updated_at: None,
+                        customers: Some(empty_arr.clone()),
+                        laundry_records: Some(empty_arr.clone()),
+                        laundry_documents: Some(empty_arr.clone()),
+                        email: email_clone,
+                    };
+
+                    println!("New backup record: {:?}", new_backup_record);
+
+                    diesel::replace_into(backup_records)
+                        .values(&new_backup_record)
+                        .execute(&conn);
+
+                    match backup_records.filter(
+                        id.eq(diesel::select(last_insert_rowid)
+                            .get_result::<i32>(&conn)
+                            .unwrap_or_default()),
+                    )
+                    .first::<BackupRecord>(&conn)
+                    {
+                        Ok(backup_record) => Some(backup_record),
+                        _ => None,
+                    }
+                }
+            };
+
+            println!(
+                "Found backup record for {:?}: {:?}",
+                &data.email, found_backup_record
+            );
+        }
+        Err(e) => {
+            println!("Err {:?}", e);
+        }
+    }
 
     match &data.customers {
         Some(customers_str) => {

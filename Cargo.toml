@@ -11,10 +11,11 @@ actix-web = "3"
 tokio = { version = "0.2.6", features = ["full"] }
 serde_json = "1.0"
 serde = "1.0.126"
-diesel = { version = "1.4.4", features = ["sqlite", "chrono", "r2d2" ] }
+diesel = { version = "1.4.7", features = ["sqlite", "chrono", "r2d2" ] }
 dotenv = "0.15.0"
 base64 = "0.13.0"
 libflate = "1.1.0"
 libsqlite3-sys = { version = ">=0.8.0, <0.13.0", optional = true, features = ["bundled"] }
 diesel_migrations = "1.4.0"
 uuid = "0.8.2"
+chrono = { version = "0.4", features = [ "serde" ] } 

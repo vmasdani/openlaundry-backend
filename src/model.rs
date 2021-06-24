@@ -1,4 +1,18 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+
+use crate::schema::*;
+
+#[derive(Queryable, Insertable, Identifiable, Debug, Serialize, Deserialize)]
+pub struct BackupRecord {
+    pub id: Option<i32>,
+    pub created_at: Option<NaiveDateTime>,
+    pub updated_at: Option<NaiveDateTime>,
+    pub customers: Option<String>,
+    pub laundry_documents: Option<String>,
+    pub laundry_records: Option<String>,
+    pub email: Option<String>
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CustomerJson {

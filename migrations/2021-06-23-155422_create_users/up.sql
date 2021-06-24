@@ -1,8 +1,8 @@
 -- Your SQL goes here
 create table users (
     uid text primary key,
-    created_at datetime default current_timestamp,
-    updated_at datetime,
+    created_at timestamp default current_timestamp,
+    updated_at timestamp,
     name text,
     email text
 );
