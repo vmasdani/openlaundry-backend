@@ -8,6 +8,6 @@ create table backup_records (
     laundry_documents text
 );
 
-create trigger if not exists ts_backup_records after update on backup_records begin
+create trigger if not exists ts_backup_records after insert on backup_records begin
     update backup_records set updated_at=current_timestamp where id=new.id;
 end;

@@ -7,7 +7,7 @@ create table users (
     email text
 );
 
-create trigger if not exists users_ts after update on users begin
+create trigger if not exists users_ts after insert on users begin
     update users set updated_at=current_timestamp where id=new.id;
 end;
 
