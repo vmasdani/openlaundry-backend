@@ -18,4 +18,4 @@ libflate = "1.1.0"
 libsqlite3-sys = { version = ">=0.8.0, <0.13.0", optional = true, features = ["bundled"] }
 diesel_migrations = "1.4.0"
 uuid = "0.8.2"
-chrono = { version = "0.4", features = [ "serde" ] } 
+chrono = { version = "0.4", features = [ "serde" ] }

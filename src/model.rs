@@ -3,6 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::schema::*;
 
+pub trait BaseModel {
+    fn created_at(&self) -> Option<u64>;
+    fn updated_at(&self) -> Option<u64>;
+    fn uid(&self) -> Option<String>;
+}
+
 #[derive(Queryable, Insertable, Identifiable, Debug, Serialize, Deserialize)]
 pub struct BackupRecord {
     pub id: Option<i32>,
@@ -11,7 +17,7 @@ pub struct BackupRecord {
     pub customers: Option<String>,
     pub laundry_documents: Option<String>,
     pub laundry_records: Option<String>,
-    pub email: Option<String>
+    pub email: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -26,6 +32,20 @@ pub struct CustomerJson {
     pub name: Option<String>,
     pub phone: Option<String>,
     pub address: Option<String>,
+}
+
+impl BaseModel for CustomerJson {
+    fn created_at(&self) -> Option<u64> {
+        self.created_at
+    }
+
+    fn updated_at(&self) -> Option<u64> {
+        self.updated_at
+    }
+
+    fn uid(&self) -> Option<String> {
+        self.uid.clone()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

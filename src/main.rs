@@ -3,6 +3,8 @@ use actix_web::{middleware, HttpResponse};
 use actix_web::{rt::System, web, App, HttpServer, Responder};
 use diesel::r2d2::ConnectionManager;
 use libflate::gzip::Encoder;
+use model::BaseModel;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -13,6 +15,12 @@ pub mod schema;
 
 #[macro_use]
 extern crate diesel;
+
+#[macro_use]
+extern crate diesel_migrations;
+
+use diesel_migrations::run_migrations;
+
 extern crate dotenv;
 
 use diesel::prelude::*;
@@ -22,6 +30,8 @@ use std::io::Read;
 use std::{env, io};
 
 use crate::model::{BackupRecord, CustomerJson};
+
+embed_migrations!();
 
 no_arg_sql_function!(
     last_insert_rowid,
@@ -45,6 +55,53 @@ struct TableJsonPostBody {
     laundy_records: Option<String>,
 }
 
+fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel>(
+    backup_record_str: String,
+) -> Option<Vec<T>> {
+    let items = match base64::decode(backup_record_str) {
+        Ok(customers_bin) => match libflate::gzip::Decoder::new(&customers_bin[..]) {
+            Ok(mut res) => {
+                let mut res_str = Vec::new();
+                res.read_to_end(&mut res_str);
+
+                let json_str = String::from_utf8_lossy(&res_str);
+
+                match serde_json::from_str::<Vec<T>>(&json_str) {
+                    Ok(items_res) => {
+                        println!("Decoded JSON: {:?}", json_str);
+                        println!("Rust struct: {:?}", items_res);
+
+                        Some(
+                            items_res
+                                .into_iter()
+                                .map(|item| {
+                                    println!("Item: {:?}", item);
+
+                                    item
+                                })
+                                .collect::<Vec<T>>(),
+                        )
+                    }
+                    Err(e) => {
+                        println!("Decoding generic JSON STR error {:?}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Customer gzip inflat error {:?}", e);
+                None
+            }
+        },
+        Err(e) => {
+            println!("Customer base64 error {:?}", e);
+            None
+        }
+    };
+
+    items
+}
+
 async fn backup_data(
     data: web::Json<TableJsonPostBody>,
     pool: web::Data<DbPool>,
@@ -58,26 +115,27 @@ async fn backup_data(
     // curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/6XQvW4DMQgH8P2eovJ8SDYQc86W54g6+A5QO+RDuWSq+u6xWqXq4CztguAPw0/sh49we9ewDYSaVDwCMRuwk0NVIphiEl82yu4YxpdwrAdr5+vpYPDVt+z8djr+hN9DS6vqxdb1kT/GtlkuVq+mu2vYpozMWTZTmTCN4XbW7uZz/A0VzeQJF9C5RmC1AjUbt6JzLOJzrtKzYh+Lz7X4f65nxDm2bwp6+6siFBGFiB5dilHh3LNS30rPrfRH6zC83gFx+AWdBwIAAA=="}'
 
     // Search email
+    let email_clone = data.email.clone();
 
-    match pool.get() {
+    let backup_record = web::block(move || match pool.get() {
         Ok(conn) => {
             use crate::schema::backup_records::dsl::*;
 
             let found_backup_record = match backup_records
-                .filter(email.eq(&data.email))
+                .filter(email.eq(&email_clone))
                 .first::<BackupRecord>(&conn)
             {
                 Ok(backup_record) => Some(backup_record),
                 Err(e) => {
                     println!("Backup record not found {:?}", e);
 
-                    let email_clone = data.email.clone();
-
                     let mut encoder = Encoder::new(Vec::new()).unwrap();
                     io::copy(&mut &b"[]"[..], &mut encoder).unwrap();
                     let empty_arr = base64::encode(encoder.finish().into_result().unwrap());
 
                     println!("Empty arr {:?}", empty_arr);
+
+                    let email_clone_param = &email_clone.clone().unwrap_or_default();
 
                     let new_backup_record = BackupRecord {
                         id: None,
@@ -86,7 +144,7 @@ async fn backup_data(
                         customers: Some(empty_arr.clone()),
                         laundry_records: Some(empty_arr.clone()),
                         laundry_documents: Some(empty_arr.clone()),
-                        email: email_clone,
+                        email: Some(email_clone_param.to_string()),
                     };
 
                     println!("New backup record: {:?}", new_backup_record);
@@ -95,57 +153,64 @@ async fn backup_data(
                         .values(&new_backup_record)
                         .execute(&conn);
 
-                    match backup_records.filter(
-                        id.eq(diesel::select(last_insert_rowid)
-                            .get_result::<i32>(&conn)
-                            .unwrap_or_default()),
-                    )
-                    .first::<BackupRecord>(&conn)
+                    match backup_records
+                        .filter(
+                            id.eq(diesel::select(last_insert_rowid)
+                                .get_result::<i32>(&conn)
+                                .unwrap_or_default()),
+                        )
+                        .first::<BackupRecord>(&conn)
                     {
                         Ok(backup_record) => Some(backup_record),
-                        _ => None,
+                        Err(e) => None,
                     }
                 }
             };
 
             println!(
                 "Found backup record for {:?}: {:?}",
-                &data.email, found_backup_record
+                &email_clone, found_backup_record
             );
+
+            Ok(found_backup_record)
         }
-        Err(e) => {
-            println!("Err {:?}", e);
-        }
-    }
+        Err(e) => Err(e),
+    })
+    .await;
 
-    match &data.customers {
-        Some(customers_str) => {
-            let customers = match base64::decode(customers_str) {
-                Ok(customers_bin) => match libflate::gzip::Decoder::new(&customers_bin[..]) {
-                    Ok(mut res) => {
-                        let mut res_str = Vec::new();
-                        res.read_to_end(&mut res_str);
+    match backup_record {
+        Ok(backup_record_res) => match backup_record_res {
+            Some(backup_record) => {
+                println!("Backup record OK");
 
-                        let json_str = String::from_utf8_lossy(&res_str);
+                println!("{:?}", backup_record);
 
-                        let customers_data = serde_json::from_str::<Vec<CustomerJson>>(&json_str);
-
-                        println!("Decoded JSON: {:?}", json_str);
-                        println!("Rust struct: {:?}", customers_data);
+                // Backup customers
+                match &data.customers {
+                    Some(customers_str) => {
+                        let customers = decode_and_backup::<CustomerJson>(customers_str.to_string());
                     }
-                    Err(e) => {
-                        println!("Customer gzip inflat error {:?}", e);
+                    None => {
+                        println!("Customer empty");
                     }
-                },
-                Err(e) => {
-                    println!("Customer base64 error {:?}", e);
                 }
-            };
-        }
-        None => {
-            println!("Customer empty");
+
+                // TODO: backup laundry records
+
+                // TODO: backup laundry documents
+
+                
+            }
+            None => {
+                println!("No backup record.");
+            }
+        },
+        Err(e) => {
+            println!("{:?}", e);
         }
     }
+
+ 
 
     match serde_json::to_string(&data) {
         Ok(data_json) => Ok(HttpResponse::Ok().json(data_json)),
@@ -161,6 +226,16 @@ async fn main() -> std::io::Result<()> {
         .max_size(1)
         .build(manager)
         .expect("Failed to create pool.");
+
+    // This will run the necessary migrations.
+    match pool.get() {
+        Ok(conn) => {
+            embedded_migrations::run(&conn);
+        }
+        Err(e) => {
+            println!("Error getting pool {:?}", e);
+        }
+    }
 
     let local = tokio::task::LocalSet::new();
     let sys = System::run_in_tokio("server", &local);
