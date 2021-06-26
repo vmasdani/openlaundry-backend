@@ -57,7 +57,30 @@ struct TableJsonPostBody {
 
 fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel>(
     backup_record_str: String,
+    db_str: String,
 ) -> Option<Vec<T>> {
+    println!("In DB: {:?}", db_str);
+
+    // First, decode DB
+    match base64::decode(db_str) {
+        Ok(db_bin) => match libflate::gzip::Decoder::new(&db_bin[..]) {
+            Ok(mut db_res) => {
+                let mut res_str = Vec::new();
+                db_res.read_to_end(&mut res_str);
+
+                let json_str = String::from_utf8_lossy(&res_str);
+
+                println!("Decoded DB: {:?}", json_str);
+            }
+            Err(e) => {
+                println!("{:?}", e);
+            }
+        },
+        Err(e) => {
+            println!("{:?}", e);
+        }
+    }
+
     let items = match base64::decode(backup_record_str) {
         Ok(customers_bin) => match libflate::gzip::Decoder::new(&customers_bin[..]) {
             Ok(mut res) => {
@@ -183,12 +206,13 @@ async fn backup_data(
             Some(backup_record) => {
                 println!("Backup record OK");
 
-                println!("{:?}", backup_record);
-
                 // Backup customers
                 match &data.customers {
                     Some(customers_str) => {
-                        let customers = decode_and_backup::<CustomerJson>(customers_str.to_string());
+                        let customers = decode_and_backup::<CustomerJson>(
+                            customers_str.to_string(),
+                            backup_record.customers.unwrap_or_default().to_string(),
+                        );
                     }
                     None => {
                         println!("Customer empty");
@@ -198,8 +222,6 @@ async fn backup_data(
                 // TODO: backup laundry records
 
                 // TODO: backup laundry documents
-
-                
             }
             None => {
                 println!("No backup record.");
@@ -209,8 +231,6 @@ async fn backup_data(
             println!("{:?}", e);
         }
     }
-
- 
 
     match serde_json::to_string(&data) {
         Ok(data_json) => Ok(HttpResponse::Ok().json(data_json)),
