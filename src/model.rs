@@ -6,6 +6,9 @@ use crate::schema::*;
 pub trait BaseModel {
     fn created_at(&self) -> Option<u64>;
     fn updated_at(&self) -> Option<u64>;
+    fn set_created_at(&mut self, created_at: u64);
+    fn set_updated_at(&mut self, updated_at: u64);
+
     fn uid(&self) -> Option<String>;
 }
 
@@ -20,7 +23,7 @@ pub struct BackupRecord {
     pub email: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomerJson {
     pub uid: Option<String>,
 
@@ -39,8 +42,16 @@ impl BaseModel for CustomerJson {
         self.created_at
     }
 
+    fn set_created_at(&mut self, created_at: u64) {
+        self.created_at = Some(created_at);
+    }
+
     fn updated_at(&self) -> Option<u64> {
         self.updated_at
+    }
+
+    fn set_updated_at(&mut self, updated_at: u64) {
+        self.updated_at = Some(updated_at);
     }
 
     fn uid(&self) -> Option<String> {

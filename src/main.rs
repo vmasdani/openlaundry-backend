@@ -43,7 +43,7 @@ async fn hello_world() -> impl Responder {
     "Hello World!"
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct TableJsonPostBody {
     email: Option<String>,
     customers: Option<String>,
@@ -55,14 +55,14 @@ struct TableJsonPostBody {
     laundy_records: Option<String>,
 }
 
-fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel>(
+fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Serialize + Clone>(
     backup_record_str: String,
     db_str: String,
-) -> Option<Vec<T>> {
+) -> Option<String> {
     println!("In DB: {:?}", db_str);
 
     // First, decode DB
-    match base64::decode(db_str) {
+    let mut db_vec = match base64::decode(db_str) {
         Ok(db_bin) => match libflate::gzip::Decoder::new(&db_bin[..]) {
             Ok(mut db_res) => {
                 let mut res_str = Vec::new();
@@ -70,18 +70,22 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel>(
 
                 let json_str = String::from_utf8_lossy(&res_str);
 
-                println!("Decoded DB: {:?}", json_str);
+                println!("Decoded DB: {:?}", json_str.len());
+
+                Some(serde_json::from_str::<Vec<T>>(&json_str).unwrap_or_default())
             }
             Err(e) => {
                 println!("{:?}", e);
+                None
             }
         },
         Err(e) => {
             println!("{:?}", e);
+            None
         }
-    }
+    };
 
-    let items = match base64::decode(backup_record_str) {
+    match base64::decode(backup_record_str) {
         Ok(customers_bin) => match libflate::gzip::Decoder::new(&customers_bin[..]) {
             Ok(mut res) => {
                 let mut res_str = Vec::new();
@@ -91,38 +95,74 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel>(
 
                 match serde_json::from_str::<Vec<T>>(&json_str) {
                     Ok(items_res) => {
-                        println!("Decoded JSON: {:?}", json_str);
+                        println!("Decoded JSON: {:?}", json_str.len());
                         println!("Rust struct: {:?}", items_res);
 
-                        Some(
-                            items_res
-                                .into_iter()
-                                .map(|item| {
-                                    println!("Item: {:?}", item);
+                        items_res.into_iter().for_each(|item| {
+                            println!("Item: {:?}", item.uid());
 
-                                    item
-                                })
-                                .collect::<Vec<T>>(),
-                        )
+                            match &mut db_vec {
+                                Some(db_vec) => {
+                                    // Find occurrences
+
+                                    println!("\nFinding occurrences...\n");
+
+                                    let db_vec_clone = db_vec.clone();
+
+                                    if db_vec_clone
+                                        .iter()
+                                        .filter(|item_x| {
+                                            item_x
+                                                .uid()
+                                                .unwrap_or_default()
+                                                .eq(&item.uid().unwrap_or_default())
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .len()
+                                        > 0
+                                    {
+                                        println!("Found UID for {:?}", &item.uid());
+                                    } else {
+                                        println!("Pushing {:?}", &item.uid());
+                                        db_vec.push(item.clone())
+                                    }
+                                }
+                                None => {
+                                    println!("No occurrences found for {:?}", &item.uid());
+                                }
+                            }
+                        });
                     }
                     Err(e) => {
                         println!("Decoding generic JSON STR error {:?}", e);
-                        None
                     }
                 }
             }
             Err(e) => {
                 println!("Customer gzip inflat error {:?}", e);
-                None
             }
         },
         Err(e) => {
             println!("Customer base64 error {:?}", e);
-            None
         }
     };
 
-    items
+    // Gzip then convert to base64
+    match serde_json::to_string(&db_vec.unwrap_or_default()) {
+        Ok(json_str) => {
+            let mut encoder = Encoder::new(Vec::new()).unwrap();
+            io::copy(&mut json_str.as_bytes(), &mut encoder).unwrap();
+
+            Some(base64::encode(
+                encoder.finish().into_result().unwrap_or_default(),
+            ))
+        }
+        Err(e) => {
+            println!("{:?}", e);
+
+            None
+        }
+    }
 }
 
 async fn backup_data(
@@ -135,12 +175,14 @@ async fn backup_data(
     let data = data.into_inner();
 
     // For testing
-    // curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/6XQvW4DMQgH8P2eovJ8SDYQc86W54g6+A5QO+RDuWSq+u6xWqXq4CztguAPw0/sh49we9ewDYSaVDwCMRuwk0NVIphiEl82yu4YxpdwrAdr5+vpYPDVt+z8djr+hN9DS6vqxdb1kT/GtlkuVq+mu2vYpozMWTZTmTCN4XbW7uZz/A0VzeQJF9C5RmC1AjUbt6JzLOJzrtKzYh+Lz7X4f65nxDm2bwp6+6siFBGFiB5dilHh3LNS30rPrfRH6zC83gFx+AWdBwIAAA=="}'
+    // 3 record cust: curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/6XQvW4DMQgH8P2eovJ8SDYQc86W54g6+A5QO+RDuWSq+u6xWqXq4CztguAPw0/sh49we9ewDYSaVDwCMRuwk0NVIphiEl82yu4YxpdwrAdr5+vpYPDVt+z8djr+hN9DS6vqxdb1kT/GtlkuVq+mu2vYpozMWTZTmTCN4XbW7uZz/A0VzeQJF9C5RmC1AjUbt6JzLOJzrtKzYh+Lz7X4f65nxDm2bwp6+6siFBGFiB5dilHh3LNS30rPrfRH6zC83gFx+AWdBwIAAA=="}'
+    // 5 record cust: curl localhost:8000/backup -H 'content-type:application/json' -d '{"email":"valianmasdani@gmail.com", "customers": "H4sIAAAAAAAA/6XSvU4DMQwH8P2eAmWupcRx4ks3ngMxJGdbMPRDvXZCvDsRqIght9Alsv/O8JPll+nD3d7F7V1ECcLmIRIpkEWDKjHC7APbkoTM0O2e3LEetH9fTweF77pn57fT8Tf8aXpaRS66rvf83vbJctF6VXm+un3ISJQ5zWXGsHO3swwnn7u/UJYcLeAC0qoHEi1Qs1J/pPnC1nLlkRXHWNzW4uNcy4jN920yWt+rIBRmAY/mjYvGQnlkjWNr3LbGh63sG5mmDJaYgBJGKMUzBJsjBdVCrY6sNLbStpUeti7SQkEjUKYKxFm7dUbwmfsJaJpzGN5rGlvTtjX90zpN0+sXB0Cn+GADAAA="}'
 
-    // Search email
-    let email_clone = data.email.clone();
+    // Search
+    let data_clone = data.clone();
+    let email_clone = data_clone.email.clone();
 
-    let backup_record = web::block(move || match pool.get() {
+    let mut backup_record = web::block(move || match pool.get() {
         Ok(conn) => {
             use crate::schema::backup_records::dsl::*;
 
@@ -195,42 +237,62 @@ async fn backup_data(
                 &email_clone, found_backup_record
             );
 
-            Ok(found_backup_record)
+            match found_backup_record {
+                Some(mut backup_record) => {
+                    println!("Backup record OK");
+
+                    // Backup customers
+                    match data_clone.customers {
+                        Some(customers_str) => {
+                            let customers_res = decode_and_backup::<CustomerJson>(
+                                customers_str.to_string(),
+                                backup_record
+                                    .customers
+                                    .clone()
+                                    .unwrap_or_default()
+                                    .to_string(),
+                            );
+
+                            match customers_res {
+                                Some(customers_json) => {
+                                    println!("Customers res str: {:?}", customers_json.len());
+
+                                    println!("{:?}", customers_json);
+
+                                    backup_record.customers = Some(customers_json);
+                                }
+                                None => {
+                                    println!("No customers to be put on record.");
+                                }
+                            }
+                        }
+                        None => {
+                            println!("Customer empty");
+                        }
+                    }
+
+                    // TODO: backup laundry records
+
+                    // TODO: backup laundry documents
+
+                    use schema::backup_records::dsl::*;
+
+                    diesel::replace_into(backup_records)
+                        .values(&backup_record)
+                        .execute(&conn);
+
+                    Ok(Some(backup_record))
+                }
+
+                None => {
+                    println!("No backup record. Error");
+                    Ok(None)
+                }
+            }
         }
         Err(e) => Err(e),
     })
     .await;
-
-    match backup_record {
-        Ok(backup_record_res) => match backup_record_res {
-            Some(backup_record) => {
-                println!("Backup record OK");
-
-                // Backup customers
-                match &data.customers {
-                    Some(customers_str) => {
-                        let customers = decode_and_backup::<CustomerJson>(
-                            customers_str.to_string(),
-                            backup_record.customers.unwrap_or_default().to_string(),
-                        );
-                    }
-                    None => {
-                        println!("Customer empty");
-                    }
-                }
-
-                // TODO: backup laundry records
-
-                // TODO: backup laundry documents
-            }
-            None => {
-                println!("No backup record.");
-            }
-        },
-        Err(e) => {
-            println!("{:?}", e);
-        }
-    }
 
     match serde_json::to_string(&data) {
         Ok(data_json) => Ok(HttpResponse::Ok().json(data_json)),
