@@ -1,4 +1,5 @@
 use actix_web::http::ContentEncoding;
+use actix_web::web::Query;
 use actix_web::{middleware, HttpResponse};
 use actix_web::{rt::System, web, App, HttpServer, Responder};
 use diesel::r2d2::ConnectionManager;
@@ -186,6 +187,37 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Seriali
     }
 }
 
+#[derive(Deserialize, Debug)]
+struct SearchEmailQuery {
+    email: Option<String>,
+}
+
+async fn search_email(pool: web::Data<DbPool>, data: Query<SearchEmailQuery>) -> impl Responder {
+    match pool.get() {
+        Ok(conn) => {
+            let found_backup_record = web::block(move || {
+                use schema::backup_records::dsl::*;
+
+                match backup_records
+                    .filter(email.eq((&data.email).clone().unwrap_or_default()))
+                    .first::<BackupRecord>(&conn)
+                {
+                    Ok(backup_record) => Ok(Some(backup_record)),
+                    Err(e) => Err(e),
+                }
+            })
+            .await;
+
+            match found_backup_record {
+                Ok(backup_record_res) => HttpResponse::Ok().json(backup_record_res),
+                Err(e) => HttpResponse::InternalServerError().json(e.to_string()),
+            }
+        }
+
+        Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+    }
+}
+
 async fn backup_data(
     data: web::Json<TableJsonPostBody>,
     pool: web::Data<DbPool>,
@@ -293,8 +325,70 @@ async fn backup_data(
                     }
 
                     // TODO: backup laundry records
+                    match data_clone.laundy_records {
+                        Some(laundry_record_str) => {
+                            let laundry_records_res = decode_and_backup::<CustomerJson>(
+                                laundry_record_str.to_string(),
+                                backup_record
+                                    .laundry_records
+                                    .clone()
+                                    .unwrap_or_default()
+                                    .to_string(),
+                            );
+
+                            match laundry_records_res {
+                                Some(laundry_records_json) => {
+                                    println!(
+                                        "Laundry Records res str: {:?}",
+                                        laundry_records_json.len()
+                                    );
+
+                                    println!("{:?}", laundry_records_json);
+
+                                    backup_record.laundry_records = Some(laundry_records_json);
+                                }
+                                None => {
+                                    println!("No laundry records to be put on record.");
+                                }
+                            }
+                        }
+                        None => {
+                            println!("laundry records empty");
+                        }
+                    }
 
                     // TODO: backup laundry documents
+                    match data_clone.laundy_documents {
+                        Some(laundy_documents_str) => {
+                            let laundry_documents_res = decode_and_backup::<CustomerJson>(
+                                laundy_documents_str.to_string(),
+                                backup_record
+                                    .laundry_documents
+                                    .clone()
+                                    .unwrap_or_default()
+                                    .to_string(),
+                            );
+
+                            match laundry_documents_res {
+                                Some(laundry_documents_json) => {
+                                    println!(
+                                        "Laundry documents res str: {:?}",
+                                        laundry_documents_json.len()
+                                    );
+
+                                    println!("{:?}", laundry_documents_json);
+
+                                    backup_record.laundry_documents = Some(laundry_documents_json);
+                                }
+                                None => {
+                                    println!("No laundry documents to be put on record.");
+                                }
+                            }
+                        }
+                        None => {
+                            println!("laundry documents empty");
+                        }
+                    }
 
                     use schema::backup_records::dsl::*;
 
@@ -348,6 +442,7 @@ async fn main() -> std::io::Result<()> {
             .data(pool.clone())
             .route("/", web::get().to(hello_world))
             .route("/backup", web::post().to(backup_data))
+            .route("/search-email", web::get().to(search_email))
     })
     .bind("0.0.0.0:8000")?
     .run()
