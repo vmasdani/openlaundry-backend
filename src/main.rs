@@ -27,6 +27,7 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 use std::io::Read;
+use std::ops::{Deref, DerefMut};
 use std::{env, io};
 
 use crate::model::{BackupRecord, CustomerJson};
@@ -105,26 +106,46 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Seriali
                                 Some(db_vec) => {
                                     // Find occurrences
 
-                                    println!("\nFinding occurrences...\n");
+                                    // let db_vec_clone = db_vec.clone();
 
-                                    let db_vec_clone = db_vec.clone();
+                                    let mut found_db_vec = db_vec.iter().find(|item_x| {
+                                        item_x
+                                            .uid()
+                                            .unwrap_or_default()
+                                            .eq(&item.uid().unwrap_or_default())
+                                    });
 
-                                    if db_vec_clone
-                                        .iter()
-                                        .filter(|item_x| {
-                                            item_x
-                                                .uid()
-                                                .unwrap_or_default()
-                                                .eq(&item.uid().unwrap_or_default())
-                                        })
-                                        .collect::<Vec<_>>()
-                                        .len()
-                                        > 0
-                                    {
-                                        println!("Found UID for {:?}", &item.uid());
-                                    } else {
-                                        println!("Pushing {:?}", &item.uid());
-                                        db_vec.push(item.clone())
+                                    match found_db_vec {
+                                        Some(found_record) => {
+                                            println!(
+                                                "Found UID for {:?}-{:?}\n\n",
+                                                &item.uid().unwrap_or_default(),
+                                                &item.created_at().unwrap_or_default()
+                                            );
+
+                                            // Compare updated_at and update if timestamp is higher
+                                            if item.updated_at().unwrap_or_default()
+                                                >= found_record.updated_at().unwrap_or_default()
+                                            {
+                                                db_vec.iter_mut().for_each(|item_x| {
+                                                    if item_x
+                                                        .uid()
+                                                        .unwrap_or_default()
+                                                        .eq(&item.uid().unwrap_or_default())
+                                                    {
+                                                        *item_x = item.clone();
+                                                    }
+                                                });
+                                            }
+                                        }
+                                        None => {
+                                            println!(
+                                                "Pushing {:?}-{:?}\n\n",
+                                                &item.uid().unwrap_or_default(),
+                                                &item.created_at().unwrap_or_default()
+                                            );
+                                            db_vec.push(item.clone())
+                                        }
                                     }
                                 }
                                 None => {
