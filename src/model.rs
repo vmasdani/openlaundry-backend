@@ -9,7 +9,7 @@ pub trait BaseModel {
     fn set_created_at(&mut self, created_at: u64);
     fn set_updated_at(&mut self, updated_at: u64);
 
-    fn uid(&self) -> Option<String>;
+    fn uuid(&self) -> Option<String>;
 }
 
 #[derive(Queryable, Insertable, Identifiable, Debug, Serialize, Deserialize)]
@@ -25,7 +25,7 @@ pub struct BackupRecord {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomerJson {
-    pub uid: Option<String>,
+    pub uuid: Option<String>,
 
     #[serde(rename = "createdAt")]
     pub created_at: Option<u64>,
@@ -54,14 +54,14 @@ impl BaseModel for CustomerJson {
         self.updated_at = Some(updated_at);
     }
 
-    fn uid(&self) -> Option<String> {
-        self.uid.clone()
+    fn uuid(&self) -> Option<String> {
+        self.uuid.clone()
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LaundryRecordJson {
-    uid: Option<String>,
+    uuid: Option<String>,
 
     #[serde(rename = "createdAt")]
     pub created_at: Option<u64>,
@@ -86,11 +86,37 @@ pub struct LaundryRecordJson {
 
     #[serde(rename = "ePayId")]
     pub e_pay_id: Option<u64>,
+    pub wash: Option<bool>,
+    pub dry: Option<bool>,
+    pub iron: Option<bool>,
+    pub note: Option<String>,
+}
+
+impl BaseModel for LaundryRecordJson {
+    fn created_at(&self) -> Option<u64> {
+        self.created_at
+    }
+
+    fn set_created_at(&mut self, created_at: u64) {
+        self.created_at = Some(created_at);
+    }
+
+    fn updated_at(&self) -> Option<u64> {
+        self.updated_at
+    }
+
+    fn set_updated_at(&mut self, updated_at: u64) {
+        self.updated_at = Some(updated_at);
+    }
+
+    fn uuid(&self) -> Option<String> {
+        self.uuid.clone()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LaundryDocumentJson {
-    pub uid: Option<String>,
+    pub uuid: Option<String>,
 
     #[serde(rename = "createdAt")]
     pub created_at: Option<u64>,
@@ -100,4 +126,26 @@ pub struct LaundryDocumentJson {
 
     pub name: Option<String>,
     pub date: Option<u64>,
+}
+
+impl BaseModel for LaundryDocumentJson {
+    fn created_at(&self) -> Option<u64> {
+        self.created_at
+    }
+
+    fn set_created_at(&mut self, created_at: u64) {
+        self.created_at = Some(created_at);
+    }
+
+    fn updated_at(&self) -> Option<u64> {
+        self.updated_at
+    }
+
+    fn set_updated_at(&mut self, updated_at: u64) {
+        self.updated_at = Some(updated_at);
+    }
+
+    fn uuid(&self) -> Option<String> {
+        self.uuid.clone()
+    }
 }

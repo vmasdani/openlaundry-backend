@@ -101,7 +101,7 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Seriali
                         println!("Rust struct: {:?}", items_res);
 
                         items_res.into_iter().for_each(|item| {
-                            println!("Item: {:?}", item.uid());
+                            println!("Item: {:?}", item.uuid());
 
                             match &mut db_vec {
                                 Some(db_vec) => {
@@ -111,16 +111,16 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Seriali
 
                                     let mut found_db_vec = db_vec.iter().find(|item_x| {
                                         item_x
-                                            .uid()
+                                            .uuid()
                                             .unwrap_or_default()
-                                            .eq(&item.uid().unwrap_or_default())
+                                            .eq(&item.uuid().unwrap_or_default())
                                     });
 
                                     match found_db_vec {
                                         Some(found_record) => {
                                             println!(
                                                 "Found UID for {:?}-{:?}\n\n",
-                                                &item.uid().unwrap_or_default(),
+                                                &item.uuid().unwrap_or_default(),
                                                 &item.created_at().unwrap_or_default()
                                             );
 
@@ -130,9 +130,9 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Seriali
                                             {
                                                 db_vec.iter_mut().for_each(|item_x| {
                                                     if item_x
-                                                        .uid()
+                                                        .uuid()
                                                         .unwrap_or_default()
-                                                        .eq(&item.uid().unwrap_or_default())
+                                                        .eq(&item.uuid().unwrap_or_default())
                                                     {
                                                         *item_x = item.clone();
                                                     }
@@ -142,7 +142,7 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Seriali
                                         None => {
                                             println!(
                                                 "Pushing {:?}-{:?}\n\n",
-                                                &item.uid().unwrap_or_default(),
+                                                &item.uuid().unwrap_or_default(),
                                                 &item.created_at().unwrap_or_default()
                                             );
                                             db_vec.push(item.clone())
@@ -150,7 +150,7 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Seriali
                                     }
                                 }
                                 None => {
-                                    println!("No occurrences found for {:?}", &item.uid());
+                                    println!("No occurrences found for {:?}", &item.uuid());
                                 }
                             }
                         });
