@@ -7,6 +7,7 @@ table! {
         laundry_records -> Nullable<Text>,
         laundry_documents -> Nullable<Text>,
         email -> Nullable<Text>,
+        expenses -> Nullable<Text>,
     }
 }
 
