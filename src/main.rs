@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 #[macro_use]
+extern crate dotenv;
+
+#[macro_use]
 extern crate dotenv_codegen;
 
 pub mod model;
@@ -507,6 +510,7 @@ async fn backup_data(
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    // dotenv::dotenv().ok();
     println!("Running on port {}", dotenv!("SERVER_PORT"));
     let manager = ConnectionManager::<SqliteConnection>::new("./openlaundry-backend.sqlite3");
     let pool = diesel::r2d2::Pool::builder()
