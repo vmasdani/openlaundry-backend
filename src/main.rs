@@ -9,6 +9,9 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
+#[macro_use]
+extern crate dotenv_codegen;
+
 pub mod model;
 pub mod schema;
 
@@ -497,14 +500,14 @@ async fn backup_data(
     .await;
 
     match backup_record {
-        Ok(backup_record) => Ok(HttpResponse::Ok().json(backup_record)),    
+        Ok(backup_record) => Ok(HttpResponse::Ok().json(backup_record)),
         Err(e) => Err(HttpResponse::InternalServerError().body(e.to_string())),
     }
 }
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    println!("Running on port 8000");
+    println!("Running on port {}", dotenv!("SERVER_PORT"));
     let manager = ConnectionManager::<SqliteConnection>::new("./openlaundry-backend.sqlite3");
     let pool = diesel::r2d2::Pool::builder()
         .max_size(1)
@@ -531,7 +534,7 @@ async fn main() -> std::io::Result<()> {
             .route("/backup", web::post().to(backup_data))
             .route("/search-email", web::get().to(search_email))
     })
-    .bind("0.0.0.0:8000")?
+    .bind(format!("0.0.0.0:{}", dotenv!("SERVER_PORT")))?
     .run()
     .await?;
     sys.await?;
