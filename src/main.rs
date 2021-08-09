@@ -9,6 +9,10 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
+#[macro_use]
+extern crate dotenv;
+
+
 pub mod model;
 pub mod schema;
 
@@ -22,18 +26,17 @@ extern crate diesel_migrations;
 
 use diesel_migrations::run_migrations;
 
-extern crate dotenv;
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
-use std::io::Read;
+use std::io::{empty, Read};
 use std::ops::{Deref, DerefMut};
 use std::{env, io};
-#[macro_use]
-extern crate dotenv_codegen;
 
-use crate::model::{BackupRecord, CustomerJson};
+use crate::model::{
+    BackupRecord, CustomerJson, ExpenseJson, LaundryDocumentJson, LaundryRecordJson,
+};
 
 embed_migrations!();
 
@@ -53,17 +56,20 @@ struct TableJsonPostBody {
     customers: Option<String>,
 
     #[serde(rename = "laundryDocuments")]
-    laundy_documents: Option<String>,
+    laundry_documents: Option<String>,
 
     #[serde(rename = "laundryRecords")]
-    laundy_records: Option<String>,
+    laundry_records: Option<String>,
+
+    expenses: Option<String>,
 }
 
 fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Serialize + Clone>(
+    title: &str,
     backup_record_str: String,
     db_str: String,
 ) -> Option<String> {
-    println!("In DB: {:?}", db_str);
+    println!("\n\n === {} === In DB", title);
 
     // First, decode DB
     let mut db_vec = match base64::decode(db_str) {
@@ -172,7 +178,14 @@ fn decode_and_backup<T: DeserializeOwned + std::fmt::Debug + BaseModel + Seriali
     };
 
     // Gzip then convert to base64
-    match serde_json::to_string(&db_vec.unwrap_or_default()) {
+    match serde_json::to_string(
+        // Remove records with deleted_at
+        &db_vec
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|item| item.deleted_at().is_none())
+            .collect::<Vec<T>>(),
+    ) {
         Ok(json_str) => {
             let mut encoder = Encoder::new(Vec::new()).unwrap();
             io::copy(&mut json_str.as_bytes(), &mut encoder).unwrap();
@@ -205,7 +218,47 @@ async fn search_email(pool: web::Data<DbPool>, data: Query<SearchEmailQuery>) ->
                     .first::<BackupRecord>(&conn)
                 {
                     Ok(backup_record) => Ok(Some(backup_record)),
-                    Err(e) => Err(e),
+                    Err(e) => {
+                        let mut encoder = Encoder::new(Vec::new()).unwrap();
+                        io::copy(&mut &b"[]"[..], &mut encoder).unwrap();
+                        let empty_arr = base64::encode(encoder.finish().into_result().unwrap());
+
+                        println!("Empty arr {:?}", empty_arr);
+
+                        let email_clone_param = (&data.email).clone().unwrap_or_default();
+
+                        let new_backup_record = BackupRecord {
+                            id: None,
+                            created_at: None,
+                            updated_at: None,
+                            customers: Some(empty_arr.clone()),
+                            laundry_records: Some(empty_arr.clone()),
+                            laundry_documents: Some(empty_arr.clone()),
+                            email: Some(email_clone_param.to_string()),
+                            expenses: Some(empty_arr.clone()),
+                        };
+
+                        use schema::backup_records::dsl::*;
+                        diesel::replace_into(backup_records)
+                            .values(new_backup_record)
+                            .execute(&conn);
+
+                        // println!("New backup record: {:?}", new_backup_record);
+
+                        // Err(e)
+
+                        match backup_records
+                            .filter(
+                                id.eq(diesel::select(last_insert_rowid)
+                                    .get_result::<i32>(&conn)
+                                    .unwrap_or_default()),
+                            )
+                            .first::<BackupRecord>(&conn)
+                        {
+                            Ok(backup_record) => Ok(Some(backup_record)),
+                            Err(e) => Err(e),
+                        }
+                    }
                 }
             })
             .await;
@@ -264,6 +317,7 @@ async fn backup_data(
                         customers: Some(empty_arr.clone()),
                         laundry_records: Some(empty_arr.clone()),
                         laundry_documents: Some(empty_arr.clone()),
+                        expenses: Some(empty_arr.clone()),
                         email: Some(email_clone_param.to_string()),
                     };
 
@@ -300,6 +354,7 @@ async fn backup_data(
                     match data_clone.customers {
                         Some(customers_str) => {
                             let customers_res = decode_and_backup::<CustomerJson>(
+                                "customers",
                                 customers_str.to_string(),
                                 backup_record
                                     .customers
@@ -327,9 +382,10 @@ async fn backup_data(
                     }
 
                     // TODO: backup laundry records
-                    match data_clone.laundy_records {
+                    match data_clone.laundry_records {
                         Some(laundry_record_str) => {
-                            let laundry_records_res = decode_and_backup::<CustomerJson>(
+                            let laundry_records_res = decode_and_backup::<LaundryRecordJson>(
+                                "laundryrecords",
                                 laundry_record_str.to_string(),
                                 backup_record
                                     .laundry_records
@@ -360,9 +416,10 @@ async fn backup_data(
                     }
 
                     // TODO: backup laundry documents
-                    match data_clone.laundy_documents {
+                    match data_clone.laundry_documents {
                         Some(laundy_documents_str) => {
-                            let laundry_documents_res = decode_and_backup::<CustomerJson>(
+                            let laundry_documents_res = decode_and_backup::<LaundryDocumentJson>(
+                                "laundrydocuments",
                                 laundy_documents_str.to_string(),
                                 backup_record
                                     .laundry_documents
@@ -392,6 +449,37 @@ async fn backup_data(
                         }
                     }
 
+                    // backup expenses
+                    match data_clone.expenses {
+                        Some(expenses_str) => {
+                            let expenses_res = decode_and_backup::<ExpenseJson>(
+                                "expenses",
+                                expenses_str.to_string(),
+                                backup_record
+                                    .expenses
+                                    .clone()
+                                    .unwrap_or_default()
+                                    .to_string(),
+                            );
+
+                            match expenses_res {
+                                Some(expenses_json) => {
+                                    println!("expenses res str: {:?}", expenses_json.len());
+
+                                    println!("{:?}", expenses_json);
+
+                                    backup_record.expenses = Some(expenses_json);
+                                }
+                                None => {
+                                    println!("No expenses to be put on record.");
+                                }
+                            }
+                        }
+                        None => {
+                            println!("expenses empty");
+                        }
+                    }
+
                     use schema::backup_records::dsl::*;
 
                     diesel::replace_into(backup_records)
@@ -411,9 +499,9 @@ async fn backup_data(
     })
     .await;
 
-    match serde_json::to_string(&data) {
-        Ok(data_json) => Ok(HttpResponse::Ok().json(data_json)),
-        Err(e) => Err(e),
+    match backup_record {
+        Ok(backup_record) => Ok(HttpResponse::Ok().json(backup_record)),
+        Err(e) => Err(HttpResponse::InternalServerError().body(e.to_string())),
     }
 }
 
