@@ -30,6 +30,8 @@ use dotenv::dotenv;
 use std::io::Read;
 use std::ops::{Deref, DerefMut};
 use std::{env, io};
+#[macro_use]
+extern crate dotenv_codegen;
 
 use crate::model::{BackupRecord, CustomerJson};
 
@@ -417,8 +419,30 @@ async fn backup_data(
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    println!("Running on port 8000");
-    let manager = ConnectionManager::<SqliteConnection>::new("./openlaundry-backend.sqlite3");
+    dotenv().ok();
+
+    let mut dbUrl = String::new();
+    let mut serverPort = String::new();
+
+    for (k, v) in env::vars() {
+        match &k[..] {
+            "SERVER_PORT" => {
+                println!(".env: server port {}", v);
+                serverPort = v;
+            }
+            "DATABASE_URL" => {
+                println!(".env: dbUrl {}", v);
+                dbUrl = v;
+            }
+            _ => {
+                // println!(".env irrelevant: {}", k)
+            }
+        }
+    }
+
+    println!("Running on port {}", serverPort);
+
+    let manager = ConnectionManager::<SqliteConnection>::new(dbUrl);
     let pool = diesel::r2d2::Pool::builder()
         .max_size(1)
         .build(manager)
@@ -444,7 +468,7 @@ async fn main() -> std::io::Result<()> {
             .route("/backup", web::post().to(backup_data))
             .route("/search-email", web::get().to(search_email))
     })
-    .bind("0.0.0.0:8000")?
+    .bind(format!("0.0.0.0:{}", serverPort))?
     .run()
     .await?;
     sys.await?;
